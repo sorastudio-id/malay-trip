@@ -282,74 +282,91 @@ export default function GlobalFileView({ folderSlug, folderName, emoji }: Global
             ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
             : "space-y-2"
         )}>
-          {sortedFiles.map((file) => (
-            <Card key={file.id} className="hover:shadow-lg transition-shadow">
-              <CardContent className={cn(
-                "p-4",
-                viewMode === 'list' ? "flex items-center gap-4" : ""
-              )}>
-                <div className={cn(
-                  "flex items-center gap-3",
-                  viewMode === 'list' ? "flex-1" : ""
-                )}>
-                  <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
-                    <FileText className="h-5 w-5 text-primary" />
-                  </div>
-                  
-                  <div className={cn("flex-1 min-w-0", viewMode === 'list' ? "flex-1" : "")}>
-                    <h4 className="font-medium truncate" title={file.name}>
-                      {file.name}
-                    </h4>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <User className="h-3 w-3" />
-                        {file.memberName}
-                      </span>
-                      <span>•</span>
-                      <span>{formatFileSize(file.size)}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {formatDate(file.createdAt)}
-                      </span>
-                    </div>
-                  </div>
+          {sortedFiles.map((file) => {
+            const name = file.name || ''
+            const lastDash = name.lastIndexOf('-')
+            const dotIndex = name.lastIndexOf('.')
+            const shouldStrip = lastDash > 0 && dotIndex > lastDash
+            const between = shouldStrip ? name.substring(lastDash + 1, dotIndex) : ''
+            const displayName = shouldStrip && /^\d+$/.test(between)
+              ? name.substring(0, lastDash) + name.substring(dotIndex)
+              : name
 
-                  <div className="flex items-center gap-1">
-                    {file.type === 'application/pdf' && (
+            return (
+              <Card
+                key={file.id}
+                className="hover:shadow-lg transition-shadow min-h-[100px] min-w-[200px] h-full"
+              >
+                <CardContent className={cn(
+                  "p-4 h-full",
+                  viewMode === 'list' ? "flex items-center gap-4" : ""
+                )}>
+                  <div className={cn(
+                    "flex items-center gap-3 h-full",
+                    viewMode === 'list' ? "flex-1" : ""
+                  )}>
+                    <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    
+                    <div className={cn("flex-1 min-w-0", viewMode === 'list' ? "flex-1" : "")}>
+                      <p
+                        className="text-sm font-medium text-gray-900 dark:text-gray-100 w-full break-words"
+                        title={file.name}
+                      >
+                        {displayName}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {file.memberName}
+                        </span>
+                        <span>•</span>
+                        <span>{formatFileSize(file.size)}</span>
+                        <span>•</span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {formatDate(file.createdAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      {file.type === 'application/pdf' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePreview(file)}
+                          title="Preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      )}
+                      
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handlePreview(file)}
-                        title="Preview"
+                        onClick={() => handleDownload(file)}
+                        title="Download"
                       >
-                        <Eye className="h-4 w-4" />
+                        <Download className="h-4 w-4" />
                       </Button>
-                    )}
-                    
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDownload(file)}
-                      title="Download"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(file)}
-                      title="Delete"
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(file)}
+                        title="Delete"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
 

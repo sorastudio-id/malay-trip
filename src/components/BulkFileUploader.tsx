@@ -8,6 +8,7 @@ import { Progress } from './ui/progress'
 import { uploadFile } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { ALLOWED_FILE_TYPES, MAX_FILE_SIZE } from '@/lib/constants'
+import { getDisplayFileName } from '@/lib/utils'
 
 interface BulkFileUploaderProps {
   folderPath: string
@@ -236,13 +237,15 @@ export default function BulkFileUploader({ folderPath, folderName, onUploadCompl
               </div>
 
               <div className="space-y-2 max-h-60 overflow-y-auto">
-                {files.map((fileItem) => (
+                {files.map((fileItem) => {
+                  const { displayName, needsTooltip } = getDisplayFileName(fileItem.file.name)
+                  return (
                   <div key={fileItem.id} className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
                     {getFileIcon(fileItem.file)}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium truncate">
-                          {fileItem.file.name}
+                        <span className="text-sm font-medium" title={needsTooltip ? fileItem.file.name : undefined}>
+                          {displayName}
                         </span>
                         {getStatusIcon(fileItem.status)}
                       </div>
@@ -265,7 +268,7 @@ export default function BulkFileUploader({ folderPath, folderName, onUploadCompl
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
           )}

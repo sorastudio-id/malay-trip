@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { FileText, Download, Trash2, Eye, Image as ImageIcon, Calendar, X, Share2, Copy } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent } from './ui/card'
-import { formatFileSize, formatDate } from '@/lib/utils'
+import { formatFileSize, formatDate, getDisplayFileName } from '@/lib/utils'
 import { listFiles, deleteFile, getFileUrl } from '@/lib/supabase'
 import { toast } from 'sonner'
 import SimplePDFViewer from './SimplePDFViewer'
@@ -147,13 +147,15 @@ export default function FileList({ folderPath }: FileListProps) {
     <>
       <div className="space-y-3">
         {files.map((file) => {
+          const { displayName, needsTooltip, originalName } = getDisplayFileName(file.name)
+          const visibleName = displayName.replace(/-\d{10,15}(?=\.[^.]+$)/, '')
           const isPDF = file.metadata?.mimetype === 'application/pdf'
           const isImage = file.metadata?.mimetype?.startsWith('image/')
 
           return (
-            <Card key={file.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
+            <Card key={file.id} className="min-h-[100px]">
+              <CardContent className="p-4 h-full">
+                <div className="flex h-full items-center gap-4">
                   <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center">
                     {isImage ? (
                       <ImageIcon className="h-5 w-5 text-primary" />
@@ -163,8 +165,13 @@ export default function FileList({ folderPath }: FileListProps) {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{file.name}</h4>
-                    <p className="text-sm text-muted-foreground">
+                    <h4
+                      className="text-sm font-medium truncate max-w-[240px]"
+                      title={needsTooltip ? originalName : undefined}
+                    >
+                      {visibleName}
+                    </h4>
+                    <p className="text-xs text-gray-500">
                       {formatFileSize(file.metadata?.size || 0)} • {formatDate(file.created_at)}
                     </p>
                   </div>

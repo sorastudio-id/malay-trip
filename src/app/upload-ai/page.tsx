@@ -3,7 +3,6 @@
 import { useCallback, useState } from 'react'
 import type { DragEvent } from 'react'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
-import workerSrc from 'pdfjs-dist/legacy/build/pdf.worker.min.js'
 import { uploadFile } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -84,7 +83,7 @@ const buildFileName = (documentType: string, owner?: string, originalName?: stri
   return `${safeDoc}-${safeOwner}-${timestamp}.${ext}`
 }
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
 
 async function extractTextFromPdf(file: File) {
   if (!(file instanceof File)) {

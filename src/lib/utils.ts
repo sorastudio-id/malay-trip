@@ -23,6 +23,26 @@ export function formatDate(date: string): string {
   })
 }
 
+const TIMESTAMP_SUFFIX_REGEX = /-\d{10,15}(?=\.[^.]+$)/
+const TIMESTAMP_SUFFIX_NO_EXT_REGEX = /-\d{10,15}$/
+
+export function getDisplayFileName(name: string, maxLength = 30) {
+  if (!name) {
+    return { displayName: '', needsTooltip: false, originalName: '' }
+  }
+
+  const cleanedName = name
+    .replace(TIMESTAMP_SUFFIX_REGEX, '')
+    .replace(TIMESTAMP_SUFFIX_NO_EXT_REGEX, '')
+  const shouldTruncate = cleanedName.length > maxLength
+
+  return {
+    displayName: shouldTruncate ? `${cleanedName.slice(0, maxLength)}...` : cleanedName,
+    needsTooltip: shouldTruncate || cleanedName !== name,
+    originalName: name
+  }
+}
+
 export function isAuthenticated(): boolean {
   if (typeof window === 'undefined') return false
   

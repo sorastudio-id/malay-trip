@@ -2,6 +2,7 @@
 
 import { X } from 'lucide-react'
 import { Button } from './ui/button'
+import { getDisplayFileName } from '@/lib/utils'
 
 interface FilePreviewProps {
   fileName: string
@@ -11,6 +12,7 @@ interface FilePreviewProps {
 }
 
 export default function FilePreview({ fileName, fileUrl, fileType, onClose }: FilePreviewProps) {
+  const { displayName, needsTooltip } = getDisplayFileName(fileName)
   const isPDF = fileType === 'application/pdf'
   const isImage = fileType.startsWith('image/')
 
@@ -18,7 +20,9 @@ export default function FilePreview({ fileName, fileUrl, fileType, onClose }: Fi
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
       <div className="fixed inset-4 md:inset-8 bg-background border rounded-lg shadow-lg flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold truncate flex-1">{fileName}</h3>
+          <h3 className="font-semibold flex-1" title={needsTooltip ? fileName : undefined}>
+            {displayName}
+          </h3>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="h-5 w-5" />
           </Button>

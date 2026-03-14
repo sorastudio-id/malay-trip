@@ -97,7 +97,8 @@ export const MEMBERS: Member[] = [
 
 export const MEMBER_FOLDERS: Folder[] = [
   { id: '1', name: 'Paspor', emoji: '🛂', slug: 'paspor' },
-  { id: '2', name: 'MDAC', emoji: '📋', slug: 'mdac' }
+  { id: '2', name: 'MDAC', emoji: '📋', slug: 'mdac' },
+  { id: '3', name: 'Tiket Pesawat', emoji: '🎫', slug: 'tiket-pesawat' }
 ]
 
 export const GROUP_FOLDERS: Folder[] = [

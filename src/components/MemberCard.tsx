@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { Card, CardContent, CardHeader } from './ui/card'
 import { Progress } from './ui/progress'
 import { cn } from '@/lib/utils'
-import { countMemberFiles } from '@/lib/supabase'
-import { Member } from '@/lib/constants'
+import { listFiles } from '@/lib/supabase'
+import { Member, MEMBER_FOLDERS } from '@/lib/constants'
 import { FileText } from 'lucide-react'
 
 interface MemberCardProps {
@@ -15,23 +15,30 @@ interface MemberCardProps {
 }
 
 export default function MemberCard({ member, onRefresh }: MemberCardProps) {
-  const [fileCount, setFileCount] = useState<number>(0)
+  const [filledFolders, setFilledFolders] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
-  const totalFolders = 2
-  const progress = (fileCount / totalFolders) * 100
+  const totalFolders = MEMBER_FOLDERS.length
+  const progress = totalFolders === 0 ? 0 : Math.min((filledFolders / totalFolders) * 100, 100)
 
   useEffect(() => {
-    loadFileCount()
+    loadFolderProgress()
   }, [member.slug, onRefresh])
 
-  const loadFileCount = async () => {
+  const loadFolderProgress = async () => {
     try {
       setLoading(true)
-      const count = await countMemberFiles(member.slug)
-      setFileCount(count)
+      const results = await Promise.all(
+        MEMBER_FOLDERS.map(async (folder) => {
+          const files = await listFiles(`${member.slug}/${folder.slug}`)
+          return files.length > 0
+        })
+      )
+      const filled = results.filter(Boolean).length
+      setFilledFolders(filled)
     } catch (error) {
-      console.error('Error loading file count:', error)
+      console.error('Error loading folder progress:', error)
+      setFilledFolders(0)
     } finally {
       setLoading(false)
     }
@@ -58,9 +65,15 @@ export default function MemberCard({ member, onRefresh }: MemberCardProps) {
                 ) : (
                   <span className={cn(
                     "font-medium",
-                    fileCount === 0 ? "text-red-500" : fileCount < 5 ? "text-orange-500" : "text-green-500"
+                    filledFolders === 0
+                      ? "text-red-500"
+                      : filledFolders < totalFolders
+                        ? "text-orange-500"
+                        : "text-green-500"
                   )}>
-                    {fileCount === 0 ? "Belum ada file" : `${fileCount} file${fileCount !== 1 ? 's' : ''}`}
+                    {filledFolders === 0
+                      ? 'Belum ada folder terisi'
+                      : `${filledFolders}/${totalFolders} folder terisi`}
                   </span>
                 )}
               </div>
