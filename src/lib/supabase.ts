@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { MEMBER_FOLDERS, GROUP_FOLDERS } from '@/lib/constants'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -51,13 +52,20 @@ export async function listFiles(folderPath: string) {
   return data || []
 }
 
-// Get public URL untuk preview/download
-export function getFileUrl(path: string) {
-  const { data } = supabase.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(path)
+// Get signed URL untuk preview/download (untuk private bucket)
+export async function getFileUrl(path: string, expiresIn = 3600) {
+  await ensureAuth()
   
-  return data.publicUrl
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .createSignedUrl(path, expiresIn)
+  
+  if (error) {
+    console.error('Error creating signed URL:', error)
+    return ''
+  }
+  
+  return data.signedUrl
 }
 
 // Download file
@@ -87,11 +95,11 @@ export async function deleteFile(path: string) {
 export async function countMemberFiles(memberSlug: string) {
   await ensureAuth()
   
-  const folders = ['paspor', 'mdac', 'tiket-pesawat', 'tiket-ferry', 'voucher-hotel', 'tiket-wisata', 'lainnya']
+  const folderSlugs = MEMBER_FOLDERS.map(folder => folder.slug)
   let totalFiles = 0
 
-  for (const folder of folders) {
-    const files = await listFiles(`${memberSlug}/${folder}`)
+  for (const slug of folderSlugs) {
+    const files = await listFiles(`${memberSlug}/${slug}`)
     totalFiles += files.length
   }
 
@@ -102,13 +110,26 @@ export async function countMemberFiles(memberSlug: string) {
 export async function countGroupFiles() {
   await ensureAuth()
   
-  const folders = ['itinerary', 'booking-airbnb', 'panduan-perjalanan', 'info-keuangan']
+  const folderSlugs = GROUP_FOLDERS.map(folder => folder.slug)
   let totalFiles = 0
 
-  for (const folder of folders) {
-    const files = await listFiles(`grup/${folder}`)
+  for (const slug of folderSlugs) {
+    const files = await listFiles(`grup/${slug}`)
     totalFiles += files.length
   }
 
   return totalFiles
+}
+
+// Count files di folder tertentu
+export async function countFolderFiles(folderPath: string) {
+  await ensureAuth()
+  
+  try {
+    const files = await listFiles(folderPath)
+    return files.length
+  } catch (error) {
+    console.error('Error counting files:', error)
+    return 0
+  }
 }

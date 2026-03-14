@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { MEMBERS, MEMBER_FOLDERS } from '@/lib/constants'
 import { isAuthenticated } from '@/lib/utils'
-import FolderGrid from '@/components/FolderGrid'
+import MemberFolderGrid from '@/components/MemberFolderGrid'
 
 export default function MemberPage() {
   const router = useRouter()
@@ -38,7 +38,7 @@ export default function MemberPage() {
         </div>
       </div>
 
-      <FolderGrid folders={MEMBER_FOLDERS} basePath={member.slug} />
+      <MemberFolderGrid folders={MEMBER_FOLDERS} basePath={member.slug} />
     </div>
   )
 }

@@ -1,18 +1,14 @@
-# 🇲🇾 Malaysia Trip Document Manager
+# Malaysia Trip
 
-Aplikasi web modern untuk mengelola dokumen perjalanan ke Malaysia. Dibangun dengan Next.js 14, Supabase Storage, dan Tailwind CSS.
+Web application for managing trip documents.
 
-## ✨ Fitur Utama
+## Tech Stack
 
-- 🔐 **Autentikasi Sederhana** - Password bersama untuk akses cepat
-- 👥 **Multi-User** - Kelola dokumen untuk 5 anggota trip
-- 📁 **Folder Terorganisir** - 7 kategori dokumen per anggota
-- 📤 **Upload & Preview** - Drag & drop, preview PDF & gambar
-- 🌙 **Dark Mode** - Toggle tema terang/gelap
-- 📱 **PWA Ready** - Install sebagai aplikasi mobile
-- 🔄 **Offline Support** - Akses dokumen yang sudah dibuka secara offline
-- 🎨 **Modern UI** - Design clean dengan Tailwind CSS & shadcn/ui
+- Next.js
+- Supabase
+- Tailwind CSS
 
+## Installation
 ## 🛠️ Tech Stack
 
 - **Framework**: Next.js 14 (App Router)

@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, Download, Trash2, Eye, Image as ImageIcon } from 'lucide-react'
+import { FileText, Download, Trash2, Eye, Image as ImageIcon, Calendar, X, Share2, Copy } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent } from './ui/card'
-import { listFiles, deleteFile, getFileUrl } from '@/lib/supabase'
 import { formatFileSize, formatDate } from '@/lib/utils'
+import { listFiles, deleteFile, getFileUrl } from '@/lib/supabase'
 import { toast } from 'sonner'
-import FilePreview from './FilePreview'
+import SimplePDFViewer from './SimplePDFViewer'
+import BulkFileUploader from './BulkFileUploader'
 
 interface FileListProps {
   folderPath: string
@@ -29,6 +30,11 @@ export default function FileList({ folderPath }: FileListProps) {
   const [files, setFiles] = useState<FileObject[]>([])
   const [loading, setLoading] = useState(true)
   const [previewFile, setPreviewFile] = useState<{ name: string; url: string; type: string } | null>(null)
+  const [pdfViewer, setPdfViewer] = useState<{ url: string; fileName: string } | null>(null)
+  const [shareTarget, setShareTarget] = useState<{ name: string; path: string; url: string | null }>({ name: '', path: '', url: null })
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
+  const [shareLoading, setShareLoading] = useState(false)
 
   useEffect(() => {
     loadFiles()
@@ -60,14 +66,47 @@ export default function FileList({ folderPath }: FileListProps) {
     }
   }
 
-  const handlePreview = (fileName: string, mimetype: string) => {
-    const url = getFileUrl(`${folderPath}/${fileName}`)
-    setPreviewFile({ name: fileName, url, type: mimetype })
+  const handlePreview = async (fileName: string, mimetype: string) => {
+    if (mimetype === 'application/pdf') {
+      const url = await getFileUrl(`${folderPath}/${fileName}`)
+      if (url) {
+        setPdfViewer({ url, fileName })
+      }
+    } else {
+      const url = await getFileUrl(`${folderPath}/${fileName}`)
+      if (url) {
+        setPreviewFile({ name: fileName, url, type: mimetype })
+      }
+    }
   }
 
-  const handleDownload = (fileName: string) => {
-    const url = getFileUrl(`${folderPath}/${fileName}`)
-    window.open(url, '_blank')
+  const handleDownload = async (fileName: string) => {
+    const url = await getFileUrl(`${folderPath}/${fileName}`)
+    if (url) {
+      window.open(url, '_blank')
+    }
+  }
+
+  const handleShare = async (fileName: string) => {
+    setShareModalOpen(true)
+    setCopySuccess(false)
+    setShareLoading(true)
+    setShareTarget({ name: fileName, path: `${folderPath}/${fileName}`, url: null })
+    const url = await getFileUrl(`${folderPath}/${fileName}`, 86400)
+    setShareTarget({ name: fileName, path: `${folderPath}/${fileName}`, url })
+    setShareLoading(false)
+  }
+
+  const handleCopyShare = async () => {
+    if (!shareTarget.url) return
+    try {
+      await navigator.clipboard.writeText(shareTarget.url)
+      setCopySuccess(true)
+      setTimeout(() => setCopySuccess(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy link:', error)
+      toast.error('Gagal menyalin link')
+    }
   }
 
   if (loading) {
@@ -145,6 +184,15 @@ export default function FileList({ folderPath }: FileListProps) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => handleShare(file.name)}
+                      title="Bagikan"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDownload(file.name)}
                       title="Download"
                     >
@@ -168,13 +216,74 @@ export default function FileList({ folderPath }: FileListProps) {
         })}
       </div>
 
-      {previewFile && (
-        <FilePreview
-          fileName={previewFile.name}
-          fileUrl={previewFile.url}
-          fileType={previewFile.type}
-          onClose={() => setPreviewFile(null)}
+      {pdfViewer && (
+        <SimplePDFViewer
+          url={pdfViewer.url}
+          fileName={pdfViewer.fileName}
+          onClose={() => setPdfViewer(null)}
         />
+      )}
+
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-8">
+          <div className="relative max-w-4xl max-h-full">
+            <button
+              onClick={() => setPreviewFile(null)}
+              className="absolute -top-12 right-0 text-white hover:text-gray-300"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            {previewFile.type.startsWith('image/') ? (
+              <img
+                src={previewFile.url}
+                alt={previewFile.name}
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <div className="bg-white p-8 rounded-lg text-center">
+                <p className="text-gray-600">Preview not available for this file type</p>
+                <Button onClick={() => window.open(previewFile.url, '_blank')} className="mt-4">
+                  Open File
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {shareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShareModalOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Bagikan file</p>
+                <h3 className="text-lg font-semibold text-gray-900">{shareTarget.name}</h3>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShareModalOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-gray-500">Link berlaku 24 jam</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={shareTarget.url || ''}
+                  className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm"
+                />
+                <Button onClick={handleCopyShare} disabled={!shareTarget.url || shareLoading} className="min-w-[120px] flex items-center gap-2">
+                  <Copy className="h-4 w-4" />
+                  {copySuccess ? '✅ Tersalin!' : 'Salin Link'}
+                </Button>
+              </div>
+              {shareLoading && <p className="text-xs text-gray-400">Menyiapkan link...</p>}
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

@@ -18,7 +18,7 @@ export default function MemberCard({ member, onRefresh }: MemberCardProps) {
   const [fileCount, setFileCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
 
-  const totalFolders = 7
+  const totalFolders = 2
   const progress = (fileCount / totalFolders) * 100
 
   useEffect(() => {
@@ -50,12 +50,18 @@ export default function MemberCard({ member, onRefresh }: MemberCardProps) {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-lg">{member.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground mb-2">{member.role}</p>
+              <div className="flex items-center gap-2 text-sm">
                 <FileText className="h-4 w-4" />
                 {loading ? (
                   <span>Loading...</span>
                 ) : (
-                  <span>{fileCount} file{fileCount !== 1 ? 's' : ''}</span>
+                  <span className={cn(
+                    "font-medium",
+                    fileCount === 0 ? "text-red-500" : fileCount < 5 ? "text-orange-500" : "text-green-500"
+                  )}>
+                    {fileCount === 0 ? "Belum ada file" : `${fileCount} file${fileCount !== 1 ? 's' : ''}`}
+                  </span>
                 )}
               </div>
             </div>
