@@ -91,6 +91,16 @@ export async function deleteFile(path: string) {
   if (error) throw error
 }
 
+export async function renameFile(oldPath: string, newPath: string) {
+  await ensureAuth()
+
+  if (oldPath === newPath) return
+
+  const { error } = await supabase.storage.from(BUCKET_NAME).move(oldPath, newPath)
+
+  if (error) throw error
+}
+
 // Count files untuk member tertentu
 export async function countMemberFiles(memberSlug: string) {
   await ensureAuth()

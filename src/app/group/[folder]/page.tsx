@@ -7,7 +7,6 @@ import { ArrowLeft, RefreshCw, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import FileUploader from '@/components/FileUploader'
 import FileList from '@/components/FileList'
-import { isAuthenticated } from '@/lib/utils'
 
 const folderConfig = {
   'tiket-transportasi': {
@@ -83,11 +82,6 @@ export default function GroupFolderPage() {
   useEffect(() => {
     if (!config) {
       router.replace('/group')
-      return
-    }
-
-    if (!isAuthenticated()) {
-      router.replace('/')
       return
     }
 

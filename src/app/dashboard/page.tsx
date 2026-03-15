@@ -3,14 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { RefreshCw, ArrowRight } from 'lucide-react'
+import { RefreshCw, ArrowRight, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import MemberCard from '@/components/MemberCard'
-import { GROUP_FOLDERS, MEMBERS } from '@/lib/constants'
-import { isAuthenticated } from '@/lib/utils'
+import { GROUP_FOLDERS, MEMBERS, MEMBER_FOLDERS } from '@/lib/constants'
 import { countGroupFiles, listFiles } from '@/lib/supabase'
 import { MemberCardSkeleton } from '@/components/LoadingSkeleton'
+import CurrencyWidget from '@/components/CurrencyWidget'
+import WeatherWidget from '@/components/WeatherWidget'
+import { toast } from 'sonner'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -18,6 +20,18 @@ export default function DashboardPage() {
   const [groupFileCount, setGroupFileCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [folderCounts, setFolderCounts] = useState<Record<string, number>>({})
+  const [countdown, setCountdown] = useState({
+    days: 0,
+    hours: 0,
+    minutes: 0,
+    seconds: 0,
+    status: 'upcoming' as 'upcoming' | 'ongoing' | 'finished'
+  })
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+
+  const TRIP_START = new Date('2026-03-16T00:00:00+08:00')
+  const TRIP_END = new Date('2026-03-23T23:59:59+08:00')
+  const TRIP_REMINDER = new Date('2026-03-15T09:00:00+08:00')
 
   const globalShortcuts = [
     {
@@ -38,13 +52,149 @@ export default function DashboardPage() {
     }
   ]
 
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/')
+  const handleEnableNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      toast.error('Browser tidak mendukung notifikasi')
       return
     }
+
+    if (Notification.permission === 'granted') {
+      localStorage.setItem('trip-notifications-enabled', 'true')
+      setNotificationsEnabled(true)
+      toast.success('Notifikasi aktif')
+      return
+    }
+
+    const result = await Notification.requestPermission()
+    if (result === 'granted') {
+      localStorage.setItem('trip-notifications-enabled', 'true')
+      setNotificationsEnabled(true)
+      toast.success('Notifikasi aktif')
+    } else {
+      toast.error('Notifikasi tidak diizinkan')
+    }
+  }
+
+  const showLocalNotification = async (title: string, body: string) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (Notification.permission !== 'granted') return
+
+    try {
+      const registration = await navigator.serviceWorker?.ready
+      if (registration?.showNotification) {
+        registration.showNotification(title, {
+          body,
+          icon: '/icon-192.png',
+          badge: '/icon-192.png'
+        })
+      } else {
+        new Notification(title, { body })
+      }
+    } catch (error) {
+      console.error('Unable to show notification', error)
+    }
+  }
+
+  const checkIncompleteDocuments = async () => {
+    if (typeof window === 'undefined') return
+    const flagKey = 'notif-missing-documents'
+    if (localStorage.getItem(flagKey)) return
+
+    try {
+      const results = await Promise.all(
+        MEMBERS.map(async (member) => {
+          const statuses = await Promise.all(
+            MEMBER_FOLDERS.map(async (folder) => {
+              const files = await listFiles(`${member.slug}/${folder.slug}`)
+              return files.length > 0
+            })
+          )
+          return statuses.some((filled) => !filled)
+        })
+      )
+
+      if (results.some(Boolean)) {
+        await showLocalNotification('Lengkapi dokumenmu 📋', 'Masih ada dokumen yang belum diupload. Yuk lengkapi!')
+        localStorage.setItem(flagKey, new Date().toISOString())
+      }
+    } catch (error) {
+      console.error('Error checking documents pending:', error)
+    }
+  }
+
+  useEffect(() => {
     loadGroupFiles()
-  }, [router, refreshKey])
+  }, [refreshKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    const saved = localStorage.getItem('trip-notifications-enabled') === 'true'
+    setNotificationsEnabled(saved)
+  }, [])
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date()
+
+      if (now < TRIP_START) {
+        const diff = TRIP_START.getTime() - now.getTime()
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24)
+        const minutes = Math.floor((diff / (1000 * 60)) % 60)
+        const seconds = Math.floor((diff / 1000) % 60)
+
+        setCountdown({ days, hours, minutes, seconds, status: 'upcoming' })
+        return
+      }
+
+      if (now >= TRIP_START && now <= TRIP_END) {
+        setCountdown((prev) => ({ ...prev, status: 'ongoing' }))
+        return
+      }
+
+      setCountdown((prev) => ({ ...prev, status: 'finished' }))
+    }
+
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    if (!notificationsEnabled || typeof window === 'undefined' || !('Notification' in window)) return
+
+    const reminderKey = 'trip-reminder-sent'
+    const scheduleReminder = () => {
+      const now = new Date()
+      const hasSent = localStorage.getItem(reminderKey)
+      const sendReminder = () => {
+        showLocalNotification('Besok berangkat! ✈️', 'Besok berangkat! Cek dokumen kamu 📋')
+        localStorage.setItem(reminderKey, new Date().toISOString())
+      }
+
+      if (now >= TRIP_REMINDER && now <= TRIP_START) {
+        if (!hasSent) sendReminder()
+        return null
+      }
+
+      const diff = TRIP_REMINDER.getTime() - now.getTime()
+      if (diff > 0 && diff <= 24 * 60 * 60 * 1000 && !hasSent) {
+        const timer = window.setTimeout(sendReminder, diff)
+        return () => window.clearTimeout(timer)
+      }
+      return null
+    }
+
+    const cleanup = scheduleReminder()
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [notificationsEnabled])
+
+  useEffect(() => {
+    if (!notificationsEnabled) return
+    checkIncompleteDocuments()
+  }, [notificationsEnabled, refreshKey])
 
   const loadGroupFiles = async () => {
     try {
@@ -79,18 +229,72 @@ export default function DashboardPage() {
   const secondRowMembers = MEMBERS.slice(3)
 
   return (
-    <div className="container py-8 space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="page-container py-8 space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Dashboard Trip Malaysia</h1>
           <p className="text-muted-foreground">
             Kelola semua dokumen perjalanan dalam satu tempat
           </p>
         </div>
-        <Button onClick={handleRefresh} variant="outline" size="sm">
+        <Button onClick={handleRefresh} variant="outline" size="sm" className="w-full sm:w-auto">
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>
+      </div>
+
+      <Card className="border border-primary/10 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10">
+        <CardContent className="p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-widest text-muted-foreground">Countdown Hari H</p>
+            {countdown.status === 'upcoming' ? (
+              <div className="mt-2 text-2xl md:text-3xl font-semibold">
+                {countdown.days} hari {countdown.hours} jam {countdown.minutes} menit {countdown.seconds} detik
+              </div>
+            ) : countdown.status === 'ongoing' ? (
+              <div className="mt-2 text-2xl md:text-3xl font-semibold text-green-600">
+                Trip sedang berlangsung! 🇲🇾
+              </div>
+            ) : (
+              <div className="mt-2 text-2xl md:text-3xl font-semibold text-muted-foreground">
+                Trip sudah selesai! 🎉
+              </div>
+            )}
+          </div>
+          {countdown.status === 'upcoming' && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+              {[['Hari', countdown.days], ['Jam', countdown.hours], ['Menit', countdown.minutes], ['Detik', countdown.seconds]].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-3xl font-bold">{value}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-blue-200/30 bg-blue-50/40 dark:bg-blue-950/30">
+        <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between p-5">
+          <div>
+            <p className="text-sm uppercase tracking-widest text-muted-foreground">Notifikasi Perjalanan</p>
+            <p className="text-base font-semibold">Terima pengingat penting langsung di device kamu</p>
+            <p className="text-sm text-muted-foreground">Pengingat H-1 & dokumen yang belum lengkap</p>
+          </div>
+          <Button
+            variant={notificationsEnabled ? 'outline' : 'default'}
+            onClick={handleEnableNotifications}
+            className="flex items-center gap-2"
+          >
+            <Bell className="h-4 w-4" />
+            {notificationsEnabled ? 'Notifikasi Aktif' : 'Aktifkan Notifikasi'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <CurrencyWidget condensed />
+        <WeatherWidget condensed />
       </div>
 
       <div
@@ -124,7 +328,7 @@ export default function DashboardPage() {
         <Card>
           <CardContent className="p-6">
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 {(loading ? firstRowMembers : firstRowMembers).map((member, index) => (
                   loading ? (
                     <MemberCardSkeleton key={member.id ?? index} />
@@ -133,7 +337,7 @@ export default function DashboardPage() {
                   )
                 ))}
               </div>
-              <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2 lg:max-w-4xl lg:mx-auto">
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 lg:max-w-4xl lg:mx-auto">
                 {(loading ? secondRowMembers : secondRowMembers).map((member, index) => (
                   loading ? (
                     <MemberCardSkeleton key={member.id ?? index} />
@@ -152,7 +356,7 @@ export default function DashboardPage() {
               <p className="text-sm uppercase text-muted-foreground tracking-wide">📂 Lihat Semua Dokumen Per Kategori</p>
               <p className="text-muted-foreground">Lihat dokumen dari semua anggota dalam satu halaman</p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
               {globalShortcuts.map((shortcut) => (
                 <Link key={shortcut.id} href={shortcut.href}>
                   <Card

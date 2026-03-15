@@ -43,25 +43,21 @@ export function getDisplayFileName(name: string, maxLength = 30) {
   }
 }
 
-export function isAuthenticated(): boolean {
-  if (typeof window === 'undefined') return false
-  
-  const authData = localStorage.getItem('trip-auth')
-  if (!authData) return false
+const INVALID_FILE_CHARS = /[\\/:*?"<>|]/g
+const MAX_FILE_NAME_LENGTH = 100
 
-  try {
-    const { timestamp } = JSON.parse(authData)
-    const sevenDays = 7 * 24 * 60 * 60 * 1000
-    return Date.now() - timestamp < sevenDays
-  } catch {
-    return false
+export function sanitizeFileName(name: string) {
+  if (!name) {
+    return 'file'
   }
-}
 
-export function setAuth() {
-  localStorage.setItem('trip-auth', JSON.stringify({ timestamp: Date.now() }))
-}
+  const trimmed = name.trim()
+  if (!trimmed) {
+    return 'file'
+  }
 
-export function clearAuth() {
-  localStorage.removeItem('trip-auth')
+  const cleaned = trimmed.replace(INVALID_FILE_CHARS, '-').replace(/\s+/g, ' ')
+  return cleaned.length > MAX_FILE_NAME_LENGTH
+    ? cleaned.slice(0, MAX_FILE_NAME_LENGTH)
+    : cleaned
 }

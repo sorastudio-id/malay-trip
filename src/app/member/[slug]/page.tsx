@@ -3,7 +3,6 @@
 import { useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { MEMBERS, MEMBER_FOLDERS } from '@/lib/constants'
-import { isAuthenticated } from '@/lib/utils'
 import MemberFolderGrid from '@/components/MemberFolderGrid'
 
 export default function MemberPage() {
@@ -14,11 +13,6 @@ export default function MemberPage() {
   const member = MEMBERS.find(m => m.slug === slug)
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/')
-      return
-    }
-
     if (!member) {
       router.push('/dashboard')
     }
@@ -27,8 +21,8 @@ export default function MemberPage() {
   if (!member) return null
 
   return (
-    <div className="container py-8 space-y-6">
-      <div className="flex items-center gap-4">
+    <div className="page-container py-8 space-y-6">
+      <div className="flex flex-wrap items-center gap-4">
         <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-xl ${member.color}`}>
           {member.initials}
         </div>

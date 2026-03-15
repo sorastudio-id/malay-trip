@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ITINERARY_DAYS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 
 function compareTimes(date: string, hour: string) {
   const target = new Date(`${date}T${hour}:00`)
@@ -26,6 +27,8 @@ export default function ItineraryPage() {
   }, [])
 
   const [activeDay, setActiveDay] = useState(() => (todayIndex >= 0 ? todayIndex : 0))
+  const [isOffline, setIsOffline] = useState(false)
+  const [savedAt, setSavedAt] = useState<string | null>(null)
 
   useEffect(() => {
     if (todayIndex >= 0) {
@@ -37,8 +40,45 @@ export default function ItineraryPage() {
     }
   }, [todayIndex])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const existing = localStorage.getItem('itinerary-offline-saved-at')
+    if (existing) setSavedAt(existing)
+    setIsOffline(!navigator.onLine)
+
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  const handleSaveOffline = () => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('itinerary-offline-data', JSON.stringify(ITINERARY_DAYS))
+      const timestamp = new Date().toLocaleString('id-ID', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+      localStorage.setItem('itinerary-offline-saved-at', timestamp)
+      setSavedAt(timestamp)
+      toast.success('Itinerary tersimpan untuk akses offline')
+    } catch (error) {
+      console.error('Failed saving itinerary offline', error)
+      toast.error('Gagal menyimpan data offline')
+    }
+  }
+
   return (
-    <div className="container py-10 space-y-6">
+    <div className="page-container py-10 space-y-6">
       <div className="space-y-2">
         <p className="text-sm font-medium text-orange-500 flex items-center gap-2">
           <span className="text-xl">🗓️</span>
@@ -49,6 +89,20 @@ export default function ItineraryPage() {
           Lihat rundown perjalanan per hari lengkap dengan waktu, lokasi, dan estimasi biaya. Tab ditandai "HARI INI"
           saat sesuai dengan tanggal berjalan.
         </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {isOffline && (
+            <div className="flex flex-1 items-start gap-3 rounded-xl border border-yellow-400/60 bg-yellow-50 px-4 py-3 text-yellow-900">
+              <span className="text-xl">📴</span>
+              <div>
+                <p className="font-semibold">Mode Offline</p>
+                <p className="text-sm">Data terakhir disimpan: {savedAt || 'Belum pernah disimpan'}</p>
+              </div>
+            </div>
+          )}
+          <Button onClick={handleSaveOffline} className="w-full sm:w-auto">
+            💾 Simpan untuk Offline
+          </Button>
+        </div>
       </div>
 
       <div className="flex overflow-x-auto gap-3 pb-2">

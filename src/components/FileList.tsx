@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FileText, Download, Trash2, Eye, Image as ImageIcon, Calendar, X, Share2, Copy } from 'lucide-react'
+import { FileText, Download, Trash2, Eye, Image as ImageIcon, Calendar, X, Share2, Copy, Pencil, Check } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card, CardContent } from './ui/card'
 import { formatFileSize, formatDate, getDisplayFileName } from '@/lib/utils'
-import { listFiles, deleteFile, getFileUrl } from '@/lib/supabase'
+import { listFiles, deleteFile, getFileUrl, renameFile } from '@/lib/supabase'
 import { toast } from 'sonner'
 import SimplePDFViewer from './SimplePDFViewer'
 import BulkFileUploader from './BulkFileUploader'
@@ -26,6 +26,20 @@ interface FileObject {
   }
 }
 
+const INVALID_NAME_REGEX = /[\/\\:*?"<>|]/
+const MAX_FILE_NAME_LENGTH = 100
+
+function splitFileName(fileName: string) {
+  const dotIndex = fileName.lastIndexOf('.')
+  if (dotIndex === -1) {
+    return { base: fileName, extension: '' }
+  }
+  return {
+    base: fileName.slice(0, dotIndex),
+    extension: fileName.slice(dotIndex)
+  }
+}
+
 export default function FileList({ folderPath }: FileListProps) {
   const [files, setFiles] = useState<FileObject[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,9 +49,22 @@ export default function FileList({ folderPath }: FileListProps) {
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const [shareLoading, setShareLoading] = useState(false)
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [editingExtension, setEditingExtension] = useState('')
+  const [renameError, setRenameError] = useState('')
+  const [renameLoadingId, setRenameLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadFiles()
+  }, [folderPath])
+
+  useEffect(() => {
+    setEditingFileId(null)
+    setRenameValue('')
+    setEditingExtension('')
+    setRenameError('')
+    setRenameLoadingId(null)
   }, [folderPath])
 
   const loadFiles = async () => {
@@ -50,6 +77,87 @@ export default function FileList({ folderPath }: FileListProps) {
       toast.error('Gagal memuat file')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const startRenaming = (file: FileObject) => {
+    const { base, extension } = splitFileName(file.name)
+    setEditingFileId(file.id)
+    setRenameValue(base)
+    setEditingExtension(extension)
+    setRenameError('')
+  }
+
+  const cancelRenaming = () => {
+    setEditingFileId(null)
+    setRenameValue('')
+    setEditingExtension('')
+    setRenameError('')
+    setRenameLoadingId(null)
+  }
+
+  const validateRename = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return 'Nama file tidak boleh kosong'
+    }
+
+    if (INVALID_NAME_REGEX.test(trimmed)) {
+      return 'Nama file mengandung karakter terlarang'
+    }
+
+    if (trimmed.length + editingExtension.length > MAX_FILE_NAME_LENGTH) {
+      return 'Nama file terlalu panjang (maks 100 karakter)'
+    }
+
+    return ''
+  }
+
+  const submitRename = async () => {
+    if (!editingFileId) return
+    const targetFile = files.find((file) => file.id === editingFileId)
+    if (!targetFile) return
+
+    let trimmed = renameValue.trim()
+    if (editingExtension && trimmed.toLowerCase().endsWith(editingExtension.toLowerCase())) {
+      trimmed = trimmed.slice(0, -editingExtension.length)
+    }
+
+    const validationMessage = validateRename(trimmed)
+    if (validationMessage) {
+      setRenameError(validationMessage)
+      return
+    }
+
+    const finalName = `${trimmed}${editingExtension}`
+
+    if (finalName === targetFile.name) {
+      cancelRenaming()
+      return
+    }
+
+    const duplicate = files.some(
+      (file) => file.name.toLowerCase() === finalName.toLowerCase() && file.id !== editingFileId
+    )
+
+    if (duplicate) {
+      setRenameError('Nama file sudah digunakan')
+      return
+    }
+
+    const oldPath = `${folderPath}/${targetFile.name}`
+    const newPath = `${folderPath}/${finalName}`
+
+    setRenameLoadingId(editingFileId)
+    try {
+      await renameFile(oldPath, newPath)
+      toast.success('File berhasil diubah namanya')
+      cancelRenaming()
+      loadFiles()
+    } catch (error) {
+      console.error('Error renaming file:', error)
+      toast.error('Gagal mengubah nama file')
+      setRenameLoadingId(null)
     }
   }
 
@@ -151,61 +259,146 @@ export default function FileList({ folderPath }: FileListProps) {
           const visibleName = displayName.replace(/-\d{10,15}(?=\.[^.]+$)/, '')
           const isPDF = file.metadata?.mimetype === 'application/pdf'
           const isImage = file.metadata?.mimetype?.startsWith('image/')
+          const isEditing = editingFileId === file.id
+          const currentExtension = isEditing ? editingExtension : splitFileName(file.name).extension
 
           return (
-            <Card key={file.id} className="min-h-[100px]">
-              <CardContent className="p-4 h-full">
-                <div className="flex h-full items-center gap-4">
-                  <div className="h-10 w-10 rounded bg-primary/10 flex items-center justify-center">
+            <Card key={file.id} className="h-full transition-shadow border border-transparent hover:border-primary/20 hover:shadow-md">
+              <CardContent className="p-5 sm:p-6 h-full flex flex-col gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     {isImage ? (
                       <ImageIcon className="h-5 w-5 text-primary" />
                     ) : (
                       <FileText className="h-5 w-5 text-primary" />
                     )}
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h4
-                      className="text-sm font-medium truncate max-w-[240px]"
-                      title={needsTooltip ? originalName : undefined}
-                    >
-                      {visibleName}
-                    </h4>
-                    <p className="text-xs text-gray-500">
-                      {formatFileSize(file.metadata?.size || 0)} • {formatDate(file.created_at)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {(isPDF || isImage) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handlePreview(file.name, file.metadata?.mimetype)}
-                        title="Preview"
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => {
+                              setRenameValue(e.target.value)
+                              setRenameError('')
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                submitRename()
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault()
+                                cancelRenaming()
+                              }
+                            }}
+                            className="flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                            autoFocus
+                            disabled={renameLoadingId === file.id}
+                          />
+                          {currentExtension && (
+                            <span className="text-sm text-muted-foreground">{currentExtension}</span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={submitRename}
+                            disabled={renameLoadingId === file.id}
+                            title="Simpan"
+                          >
+                            <Check className="h-4 w-4 text-green-600" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={cancelRenaming}
+                            disabled={renameLoadingId === file.id}
+                            title="Batal"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        {renameError && (
+                          <p className="text-xs text-red-500">{renameError}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <h4
+                        className="text-base font-semibold leading-snug text-gray-900 dark:text-gray-100"
+                        title={needsTooltip ? originalName : undefined}
+                        style={{
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden'
+                        }}
                       >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                        {visibleName}
+                      </h4>
                     )}
-                    
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {formatDate(file.created_at)}
+                      </span>
+                      <span className="text-muted-foreground/70">•</span>
+                      <span>{formatFileSize(file.metadata?.size || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2">
+                  {(isPDF || isImage) && !isEditing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handlePreview(file.name, file.metadata?.mimetype)}
+                      title="Preview"
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {!isEditing && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleShare(file.name)}
                       title="Bagikan"
+                      className="text-muted-foreground hover:text-primary"
                     >
                       <Share2 className="h-4 w-4" />
                     </Button>
+                  )}
 
+                  {!isEditing && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDownload(file.name)}
                       title="Download"
+                      className="text-muted-foreground hover:text-primary"
                     >
                       <Download className="h-4 w-4" />
                     </Button>
+                  )}
 
+                  {!isEditing && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => startRenaming(file)}
+                      title="Ubah nama"
+                      className="text-muted-foreground hover:text-primary"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  )}
+
+                  {!isEditing && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -215,7 +408,7 @@ export default function FileList({ folderPath }: FileListProps) {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -35,9 +35,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} bg-background text-foreground`}>
         <Navbar />
-        <main className="min-h-screen">
+        <main className="min-h-screen w-full">
           {children}
         </main>
         <Toaster position="top-center" richColors />

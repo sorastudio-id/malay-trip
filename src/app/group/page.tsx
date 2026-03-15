@@ -1,22 +1,14 @@
 'use client'
 
-import { useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, FolderOpen } from 'lucide-react'
 import { GROUP_FOLDERS } from '@/lib/constants'
-import { isAuthenticated } from '@/lib/utils'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
 export default function GroupPage() {
   const router = useRouter()
-
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/')
-    }
-  }, [router])
 
   const handleNavigate = (slug: string) => {
     router.push(`/group/${slug}`)

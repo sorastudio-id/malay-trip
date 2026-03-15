@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent } from './ui/card'
 import { Button } from './ui/button'
 import SearchBar from './SearchBar'
-import { FileText, Download, Trash2, Eye, User, Calendar, Filter, Grid, List } from 'lucide-react'
+import { FileText, Download, Trash2, Eye, User, Calendar, Filter, Grid, List, Pencil, Check, X } from 'lucide-react'
 import { formatFileSize, formatDate, cn } from '@/lib/utils'
-import { listFiles, deleteFile, getFileUrl } from '@/lib/supabase'
+import { listFiles, deleteFile, getFileUrl, renameFile } from '@/lib/supabase'
 import { toast } from 'sonner'
 import SimplePDFViewer from './SimplePDFViewer'
 import { MEMBERS } from '@/lib/constants'
@@ -39,10 +39,122 @@ export default function GlobalFileView({ folderSlug, folderName, emoji }: Global
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size' | 'member'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [previewFile, setPreviewFile] = useState<{ url: string; fileName: string } | null>(null)
+  const [editingFileId, setEditingFileId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [editingExtension, setEditingExtension] = useState('')
+  const [renameError, setRenameError] = useState('')
+  const [renameLoadingId, setRenameLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadAllFiles()
   }, [folderSlug])
+
+  useEffect(() => {
+    setEditingFileId(null)
+    setRenameValue('')
+    setEditingExtension('')
+    setRenameError('')
+    setRenameLoadingId(null)
+  }, [folderSlug])
+
+  const INVALID_NAME_REGEX = /[\/\\:*?"<>|]/
+  const MAX_FILE_NAME_LENGTH = 100
+
+  function splitFileName(fileName: string) {
+    const dotIndex = fileName.lastIndexOf('.')
+    if (dotIndex === -1) {
+      return { base: fileName, extension: '' }
+    }
+    return {
+      base: fileName.slice(0, dotIndex),
+      extension: fileName.slice(dotIndex)
+    }
+  }
+
+  const startRenaming = (file: GlobalFile) => {
+    const { base, extension } = splitFileName(file.name)
+    setEditingFileId(file.id)
+    setRenameValue(base)
+    setEditingExtension(extension)
+    setRenameError('')
+  }
+
+  const cancelRenaming = () => {
+    setEditingFileId(null)
+    setRenameValue('')
+    setEditingExtension('')
+    setRenameError('')
+    setRenameLoadingId(null)
+  }
+
+  const validateRename = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return 'Nama file tidak boleh kosong'
+    }
+
+    if (INVALID_NAME_REGEX.test(trimmed)) {
+      return 'Nama file mengandung karakter terlarang'
+    }
+
+    if (trimmed.length + editingExtension.length > MAX_FILE_NAME_LENGTH) {
+      return 'Nama file terlalu panjang (maks 100 karakter)'
+    }
+
+    return ''
+  }
+
+  const submitRename = async () => {
+    if (!editingFileId) return
+    const targetFile = files.find((file) => file.id === editingFileId)
+    if (!targetFile) return
+
+    let trimmed = renameValue.trim()
+    if (editingExtension && trimmed.toLowerCase().endsWith(editingExtension.toLowerCase())) {
+      trimmed = trimmed.slice(0, -editingExtension.length)
+    }
+
+    const validationMessage = validateRename(trimmed)
+    if (validationMessage) {
+      setRenameError(validationMessage)
+      return
+    }
+
+    const finalName = `${trimmed}${editingExtension}`
+
+    if (finalName === targetFile.name) {
+      cancelRenaming()
+      return
+    }
+
+    const duplicate = files.some(
+      (file) =>
+        file.id !== editingFileId &&
+        file.memberSlug === targetFile.memberSlug &&
+        file.folderSlug === targetFile.folderSlug &&
+        file.name.toLowerCase() === finalName.toLowerCase()
+    )
+
+    if (duplicate) {
+      setRenameError('Nama file sudah digunakan')
+      return
+    }
+
+    const oldPath = `${targetFile.memberSlug}/${targetFile.folderSlug}/${targetFile.name}`
+    const newPath = `${targetFile.memberSlug}/${targetFile.folderSlug}/${finalName}`
+
+    setRenameLoadingId(editingFileId)
+    try {
+      await renameFile(oldPath, newPath)
+      toast.success('File berhasil diubah namanya')
+      cancelRenaming()
+      loadAllFiles()
+    } catch (error) {
+      console.error('Error renaming file:', error)
+      toast.error('Gagal mengubah nama file')
+      setRenameLoadingId(null)
+    }
+  }
 
   const loadAllFiles = async () => {
     try {
@@ -292,66 +404,143 @@ export default function GlobalFileView({ folderSlug, folderName, emoji }: Global
               ? name.substring(0, lastDash) + name.substring(dotIndex)
               : name
 
+            const isEditing = editingFileId === file.id
+            const currentExtension = isEditing ? editingExtension : splitFileName(file.name).extension
+
             return (
               <Card
                 key={file.id}
-                className="hover:shadow-lg transition-shadow min-h-[100px] min-w-[200px] h-full"
+                className="h-full transition-shadow border border-transparent hover:border-primary/20 hover:shadow-md"
               >
                 <CardContent className={cn(
-                  "p-4 h-full",
-                  viewMode === 'list' ? "flex items-center gap-4" : ""
+                  "p-5 sm:p-6 h-full flex flex-col gap-4",
+                  viewMode === 'list' ? "sm:flex-row sm:items-center sm:gap-6" : ""
                 )}>
                   <div className={cn(
-                    "flex items-center gap-3 h-full",
-                    viewMode === 'list' ? "flex-1" : ""
+                    "flex items-start gap-3",
+                    viewMode === 'list' ? "sm:flex-1" : ""
                   )}>
-                    <div className="w-10 h-10 bg-primary/10 rounded flex items-center justify-center">
+                    <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center shrink-0">
                       <FileText className="h-5 w-5 text-primary" />
                     </div>
-                    
-                    <div className={cn("flex-1 min-w-0", viewMode === 'list' ? "flex-1" : "")}>
-                      <p
-                        className="text-sm font-medium text-gray-900 dark:text-gray-100 w-full break-words"
-                        title={file.name}
-                      >
-                        {displayName}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
+
+                    <div className="flex-1 min-w-0 space-y-2">
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={renameValue}
+                              onChange={(e) => {
+                                setRenameValue(e.target.value)
+                                setRenameError('')
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  submitRename()
+                                }
+                                if (e.key === 'Escape') {
+                                  e.preventDefault()
+                                  cancelRenaming()
+                                }
+                              }}
+                              className="flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
+                              autoFocus
+                              disabled={renameLoadingId === file.id}
+                            />
+                            {currentExtension && (
+                              <span className="text-sm text-muted-foreground">{currentExtension}</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={submitRename}
+                              disabled={renameLoadingId === file.id}
+                              title="Simpan"
+                            >
+                              <Check className="h-4 w-4 text-green-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={cancelRenaming}
+                              disabled={renameLoadingId === file.id}
+                              title="Batal"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {renameError && <p className="text-xs text-red-500">{renameError}</p>}
+                        </div>
+                      ) : (
+                        <p
+                          className="text-base font-semibold text-gray-900 dark:text-gray-100 leading-snug"
+                          title={file.name}
+                          style={{
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {displayName}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
+                          <User className="h-3.5 w-3.5" />
                           {file.memberName}
                         </span>
-                        <span>•</span>
+                        <span className="text-muted-foreground/70">•</span>
                         <span>{formatFileSize(file.size)}</span>
-                        <span>•</span>
+                        <span className="text-muted-foreground/70">•</span>
                         <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
+                          <Calendar className="h-3.5 w-3.5" />
                           {formatDate(file.createdAt)}
                         </span>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex items-center gap-1">
-                      {file.type === 'application/pdf' && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handlePreview(file)}
-                          title="Preview"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      )}
-                      
+                  <div className="flex items-center justify-end gap-2 pt-2 sm:pt-0">
+                    {file.type === 'application/pdf' && !isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePreview(file)}
+                        title="Preview"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    {!isEditing && (
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDownload(file)}
                         title="Download"
+                        className="text-muted-foreground hover:text-primary"
                       >
                         <Download className="h-4 w-4" />
                       </Button>
+                    )}
 
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startRenaming(file)}
+                        title="Ubah nama"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+
+                    {!isEditing && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -361,7 +550,7 @@ export default function GlobalFileView({ folderSlug, folderName, emoji }: Global
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

@@ -1,21 +1,9 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { isAuthenticated } from '@/lib/utils'
 import { MEMBER_FOLDERS, GROUP_FOLDERS } from '@/lib/constants'
 import GlobalFileView from '@/components/GlobalFileView'
-import { useEffect } from 'react'
 
 export default function GlobalFilesPage({ params }: { params: { folder: string } }) {
-  const router = useRouter()
-
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/')
-      return
-    }
-  }, [router])
-
   const folderSlug = params.folder
   
   // Find folder info

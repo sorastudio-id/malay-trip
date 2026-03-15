@@ -2,22 +2,11 @@
 
 import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { isAuthenticated } from '@/lib/utils'
 import { useStatistics } from '@/hooks/useStatistics'
 import StatisticsDashboard from '@/components/StatisticsDashboard'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
 
 export default function StatisticsPage() {
-  const router = useRouter()
   const { memberStats, groupStats, overallStats, loading, refreshStats } = useStatistics()
-
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push('/')
-      return
-    }
-  }, [router])
 
   return (
     <div className="container py-8 space-y-8">

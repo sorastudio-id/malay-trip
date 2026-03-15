@@ -1,12 +1,38 @@
-import { GoogleGenAI } from '@google/genai'
+import OpenAI from 'openai'
 import { NextResponse } from 'next/server'
+import { normalizeDocumentTypeKey, normalizeOwnerName } from '@/lib/folderMapping'
+import { requireServerAuth } from '@/lib/serverAuth'
 
-const geminiApiKey = process.env.GEMINI_API_KEY || ''
-const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
-const ai = new GoogleGenAI({ apiKey: geminiApiKey })
+const ALLOWED_OWNER_SLUGS = new Set(['ihsan', 'lisza', 'taufiq', 'ahsan', 'athaya', 'grup'])
+
+const openrouterApiKey = process.env.OPENROUTER_API_KEY || ''
+const openrouterModel = process.env.OPENROUTER_MODEL || 'openrouter/healer-alpha'
+const openrouter = openrouterApiKey
+  ? new OpenAI({
+      apiKey: openrouterApiKey,
+      baseURL: 'https://openrouter.ai/api/v1'
+    })
+  : null
+
+function extractJSON(text: string): string {
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch) return codeBlockMatch[1].trim()
+  const jsonMatch = text.match(/\{[\s\S]*\}/)
+  if (jsonMatch) return jsonMatch[0].trim()
+  return text.trim()
+}
 
 export async function POST(request: Request) {
   try {
+    await requireServerAuth()
+    if (!openrouter) {
+      console.error('OpenRouter API key is missing')
+      return NextResponse.json(
+        { error: 'Gagal menganalisis dokumen. Coba lagi nanti.' },
+        { status: 500 }
+      )
+    }
+
     const body = await request.json()
     const documentText = body?.text
 
@@ -16,15 +42,23 @@ export async function POST(request: Request) {
 
     const text = documentText.slice(0, 4000)
     const prompt = `
+You MUST respond with ONLY a raw JSON object. No markdown, no code blocks, no explanation text whatsoever. Just the JSON object starting with { and ending with }.
+
 Analisis teks dokumen PDF berikut.
 
-ATURAN PENTING:
-- Jika dokumen adalah hotel/penginapan/ferry/airbnb 
-  yang berlaku untuk BANYAK orang → owner = GROUP
-- Jika dokumen adalah boarding pass PERSONAL 
-  milik 1 orang → owner = nama orang tersebut
-- Nama dalam booking hotel BUKAN berarti 
-  dokumen itu milik orang tersebut secara pribadi
+RULES FOR DETERMINING "owner":
+- Jika dokumen MILIK SATU orang (passport, MDAC, tiket personal) → owner = nama depan mereka dalam huruf kecil: "ihsan", "lisza", "taufiq", "ahsan", atau "athaya" saja.
+- ONLY gunakan "grup" jika dokumen jelas berlaku UNTUK SEMUA 5 ORANG sekaligus (contoh: booking Airbnb bersama, itinerary grup, dokumen finansial bersama).
+- Jika ada nama satu orang pada dokumen → owner = orang tersebut, BUKAN "grup".
+- Dokumen MDAC SELALU personal → owner harus nama orang tersebut.
+- Dokumen Paspor SELALU personal → owner harus nama orang tersebut.
+
+KNOWN MEMBERS AND OWNER VALUES:
+- IHSAN EKA PUTRA → "ihsan"
+- LISZA HERAWATI → "lisza"
+- TAUFIQURRAHMAN → "taufiq"
+- AHSAN RAMADAN → "ahsan"
+- ATHAYA RIZQULLAH → "athaya"
 
 JENIS DOKUMEN:
 - BOARDING_PASS: ada "Boarding Pass", "AK 428", "PKU→KUL", seat number
@@ -35,24 +69,10 @@ JENIS DOKUMEN:
 - MDAC: ada "Malaysia Digital Arrival Card" atau "MDAC" atau "imigresen"
 - PASSPORT: ada "Passport No" atau "Paspor" atau nomor paspor format huruf+angka
 
-PEMILIK:
-- BOARDING_PASS → cari nama penumpang di dokumen:
-  IHSAN/ihsan → IHSAN
-  LISZA/lisza → LISZA
-  TAUFIQ/taufiq/Taufiqurrahman → TAUFIQ
-  AHSAN/ahsan → AHSAN
-  ATHAYA/athaya → ATHAYA
-- FERRY_TICKET → selalu GROUP (untuk 5 orang)
-- AIRBNB → selalu GROUP
-- HOTEL_VOUCHER_TRIPLE → selalu GROUP
-- HOTEL_VOUCHER_DOUBLE → selalu GROUP
-- MDAC → cari nama orang yang mendaftar
-- PASSPORT → cari nama di paspor
-
 Balas HANYA JSON valid:
 {
   "documentType": "BOARDING_PASS",
-  "owner": "AHSAN", 
+  "owner": "ahsan", 
   "confidence": 0.95,
   "detectedInfo": "Boarding pass AirAsia AK428 atas nama AHSAN RAMADAN"
 }
@@ -61,28 +81,72 @@ Teks dokumen:
 ${text}
 `
 
-    const response = await ai.models.generateContent({
-      model: geminiModel,
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json'
-      }
+    const response = await openrouter.chat.completions.create({
+      model: openrouterModel,
+      temperature: 0,
+      max_tokens: 400,
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
     })
-    const classificationText = (response.text || '').trim()
+
+    const choice = response.choices?.[0]
+    const messageContent = choice?.message?.content
+    let classificationText = ''
+
+    if (typeof messageContent === 'string') {
+      classificationText = messageContent.trim()
+    } else if (Array.isArray(messageContent)) {
+      const contentArray = messageContent as Array<{ type: string; text?: string }>
+      const textPart = contentArray.find((part) => part.type === 'text')
+      classificationText = (textPart?.text || '').trim()
+    }
 
     try {
-      const parsed = JSON.parse(classificationText)
-      return NextResponse.json(parsed)
+      const parsed = JSON.parse(extractJSON(classificationText))
+      const normalizedDocumentType = normalizeDocumentTypeKey(parsed?.documentType)
+      const normalizedOwner = normalizeOwnerName(parsed?.owner)
+
+      if (normalizedOwner === 'UNKNOWN') {
+        return NextResponse.json(
+          { error: 'Pemilik dokumen tidak valid. Silakan upload manual.' },
+          { status: 400 }
+        )
+      }
+
+      const ownerSlug = normalizedOwner === 'GROUP' ? 'grup' : normalizedOwner.toLowerCase()
+
+      if (!ALLOWED_OWNER_SLUGS.has(ownerSlug)) {
+        return NextResponse.json(
+          { error: 'Pemilik dokumen tidak dikenali. Silakan upload manual.' },
+          { status: 400 }
+        )
+      }
+
+      return NextResponse.json({
+        ...parsed,
+        documentType: normalizedDocumentType,
+        owner: ownerSlug
+      })
     } catch (parseError) {
-      console.error('Failed to parse Gemini JSON:', classificationText)
-      return NextResponse.json({ error: 'Invalid AI response format' }, { status: 500 })
+      console.error('Failed to parse OpenRouter JSON:', classificationText)
+      return NextResponse.json(
+        { error: 'Gagal menganalisis dokumen. Coba lagi.' },
+        { status: 500 }
+      )
     }
   } catch (error) {
-    console.error('Gemini API Error:', error)
+    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    console.error('OpenRouter API Error:', error)
     return NextResponse.json(
       {
-        error: 'Failed to analyze document',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Gagal menganalisis dokumen. Coba lagi.'
       },
       { status: 500 }
     )

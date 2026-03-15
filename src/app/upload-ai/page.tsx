@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf'
-import { uploadFile } from '@/lib/supabase'
+import { uploadFile, listFiles } from '@/lib/supabase'
+import { buildStoragePath, normalizeDocumentTypeKey, normalizeOwnerSlug } from '@/lib/folderMapping'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Loader2, CheckCircle2, AlertCircle, UploadCloud, X } from 'lucide-react'
@@ -37,21 +38,10 @@ type ProcessRecord = {
   result?: AnalysisResult
   finalPath?: string
   error?: string
+  duplicate?: boolean
+  duplicateMessage?: string
+  skipped?: boolean
 }
-
-type PathResolver = (owner?: string) => string | null
-
-const pathMapping: Record<string, PathResolver> = {
-  BOARDING_PASS: (owner) => (owner ? `${owner.toLowerCase()}/tiket-pesawat/` : null),
-  FERRY_TICKET: () => 'grup/tiket-transportasi/',
-  AIRBNB: () => 'grup/akomodasi/',
-  HOTEL_VOUCHER_TRIPLE: () => 'grup/akomodasi/',
-  HOTEL_VOUCHER_DOUBLE: () => 'grup/akomodasi/',
-  MDAC: (owner) => (owner ? `${owner.toLowerCase()}/mdac/` : null),
-  PASSPORT: (owner) => (owner ? `${owner.toLowerCase()}/paspor/` : null)
-}
-
-const FALLBACK_PATH = 'grup/unggahan-lain/'
 
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes)) return '0 KB'
@@ -69,19 +59,15 @@ const createInitialSteps = (): Record<StepKey, StepStatus> => {
   }, {} as Record<StepKey, StepStatus>)
 }
 
-const normalizeOwner = (owner?: string) => {
-  if (!owner || owner === 'UNKNOWN') return 'unknown'
-  if (owner === 'GROUP') return 'group'
-  return owner.toLowerCase()
-}
-
 const buildFileName = (documentType: string, owner?: string, originalName?: string) => {
   const ext = originalName?.split('.').pop() || 'pdf'
   const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
-  const safeOwner = normalizeOwner(owner)
-  const safeDoc = documentType?.toLowerCase() || 'unknown'
+  const safeOwner = normalizeOwnerSlug(owner)
+  const safeDoc = normalizeDocumentTypeKey(documentType).toLowerCase()
   return `${safeDoc}-${safeOwner}-${timestamp}.${ext}`
 }
+
+const normalizeFolderKey = (path: string) => path.replace(/^\/+/, '').replace(/\/+$/, '')
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`
 
@@ -115,6 +101,7 @@ export default function UploadAiPage() {
   const [processes, setProcesses] = useState<ProcessRecord[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const folderCacheRef = useRef<Record<string, string[]>>({})
 
   const handleFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return
@@ -155,6 +142,21 @@ export default function UploadAiPage() {
     setProcesses((prev) => prev.map((proc) => (proc.id === id ? { ...proc, ...patch } : proc)))
   }
 
+  const getFolderFiles = useCallback(async (folderPath: string) => {
+    const key = normalizeFolderKey(folderPath)
+    if (folderCacheRef.current[key]) {
+      return folderCacheRef.current[key]
+    }
+
+    const files = await listFiles(key)
+    const names = files
+      .map((file) => (file.name ? file.name.toLowerCase() : null))
+      .filter(Boolean) as string[]
+
+    folderCacheRef.current[key] = names
+    return names
+  }, [])
+
   const analyzeDocument = async (text: string): Promise<AnalysisResult> => {
     const response = await fetch('/api/analyze-document', {
       method: 'POST',
@@ -171,12 +173,10 @@ export default function UploadAiPage() {
   }
 
   const resolvePath = (documentType: string, owner?: string) => {
-    const resolver = pathMapping[documentType as keyof typeof pathMapping]
-    const base = resolver ? resolver(owner) : null
-    return (base || FALLBACK_PATH).replace(/\/+/g, '/').replace(/\/+$/, '/')
+    return buildStoragePath(documentType, owner).replace(/\/+/g, '/').replace(/\/+$/, '/')
   }
 
-  const runPipeline = async (record: ProcessRecord) => {
+  const runPipeline = async (record: ProcessRecord): Promise<'uploaded' | 'skipped' | 'error'> => {
     const { id, file } = record
     let currentStep: StepKey | null = null
 
@@ -202,14 +202,35 @@ export default function UploadAiPage() {
       const folder = resolvePath(analysis.documentType, analysis.owner)
       const autoName = buildFileName(analysis.documentType, analysis.owner, file.name)
       const renamedFile = new File([file], autoName, { type: file.type })
+
+      const folderKey = normalizeFolderKey(folder)
+      const existingNames = await getFolderFiles(folderKey)
+      const targetName = autoName.toLowerCase()
+      const isDuplicate = existingNames.some((name) => name === targetName)
+
+      if (isDuplicate) {
+        const message = `File '${record.name}' sudah ada di folder ini. Hapus file lama terlebih dahulu jika ingin menggantinya.`
+        updateProcess(id, {
+          duplicate: true,
+          duplicateMessage: message,
+          skipped: true,
+          error: message
+        })
+        updateStep(id, 'upload', 'error')
+        toast.warning('File sudah ada', { description: message })
+        return 'skipped'
+      }
+
       await uploadFile(`${folder}${autoName}`, renamedFile)
+      folderCacheRef.current[folderKey] = [...(existingNames || []), targetName]
       updateProcess(id, { finalPath: `${folder}${autoName}` })
       updateStep(id, 'upload', 'success')
 
       currentStep = 'complete'
       updateStep(id, currentStep, 'running')
       updateStep(id, currentStep, 'success')
-      toast.success(`${file.name} selesai diunggah`) 
+      toast.success(`${file.name} selesai diunggah`)
+      return 'uploaded'
     } catch (error) {
       console.error('Pipeline failed', error)
       const message = error instanceof Error ? error.message : 'Terjadi kesalahan'
@@ -218,6 +239,7 @@ export default function UploadAiPage() {
         updateStep(id, currentStep, 'error')
       }
       toast.error(`${record.name}: ${message}`)
+      return 'error'
     }
   }
 
@@ -225,13 +247,31 @@ export default function UploadAiPage() {
     if (!processes.length || processing) return
     setProcessing(true)
 
+    let uploadedCount = 0
+    let skippedCount = 0
+    const skippedNames: string[] = []
+
     for (const record of processes) {
-      const alreadyDone = record.steps.complete === 'success'
+      const alreadyDone = record.steps.complete === 'success' || record.skipped
       if (alreadyDone) continue
-      await runPipeline(record)
+      const result = await runPipeline(record)
+      if (result === 'uploaded') uploadedCount += 1
+      if (result === 'skipped') {
+        skippedCount += 1
+        skippedNames.push(record.name)
+      }
     }
 
     setProcessing(false)
+
+    if (uploadedCount > 0) {
+      toast.success(`${uploadedCount} file berhasil diupload`)
+    }
+
+    if (skippedNames.length > 0) {
+      const summary = `${skippedNames.length} file dilewati karena sudah ada: ${skippedNames.join(', ')}`
+      toast.warning('File sudah ada', { description: summary })
+    }
   }
 
   const dropProps = {
@@ -302,12 +342,23 @@ export default function UploadAiPage() {
 
       <section className="space-y-4">
         {processes.map((record) => (
-          <div key={record.id} className="rounded-2xl border bg-white/80 p-6 shadow-sm">
+          <div
+            key={record.id}
+            className={cn(
+              'rounded-2xl border bg-white/80 p-6 shadow-sm',
+              record.duplicate && 'border-red-300 bg-red-50/80'
+            )}
+          >
             <div className="flex flex-wrap items-start gap-4">
               <div className="flex-1">
                 <h3 className="text-lg font-semibold">{record.name}</h3>
                 <p className="text-sm text-muted-foreground">{formatBytes(record.size)}</p>
               </div>
+              {record.skipped && (
+                <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-600">
+                  Dilewati (duplikat)
+                </span>
+              )}
               {!processing && (
                 <Button variant="ghost" size="icon" onClick={() => removeProcess(record.id)}>
                   <X className="h-4 w-4" />
