@@ -17,8 +17,8 @@ export default function FilePreview({ fileName, fileUrl, fileType, onClose }: Fi
   const isImage = fileType.startsWith('image/')
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
-      <div className="fixed inset-4 md:inset-8 bg-background border rounded-lg shadow-lg flex flex-col">
+    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl mx-auto max-h-[90vh] overflow-y-auto bg-background border rounded-lg shadow-lg flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold flex-1" title={needsTooltip ? fileName : undefined}>
             {displayName}
@@ -30,11 +30,16 @@ export default function FilePreview({ fileName, fileUrl, fileType, onClose }: Fi
 
         <div className="flex-1 overflow-auto p-4">
           {isPDF && (
-            <iframe
-              src={fileUrl}
-              className="w-full h-full rounded border"
-              title={fileName}
-            />
+            <div className="w-full overflow-hidden">
+              <div className="overflow-x-auto">
+                <iframe
+                  src={fileUrl}
+                  className="w-full h-[70vh] rounded-lg border"
+                  style={{ maxWidth: '100%' }}
+                  title={fileName}
+                />
+              </div>
+            </div>
           )}
 
           {isImage && (

@@ -263,152 +263,158 @@ export default function FileList({ folderPath }: FileListProps) {
           const currentExtension = isEditing ? editingExtension : splitFileName(file.name).extension
 
           return (
-            <Card key={file.id} className="h-full transition-shadow border border-transparent hover:border-primary/20 hover:shadow-md">
+            <Card
+              key={file.id}
+              className="h-full transition-shadow border border-transparent hover:border-primary/20 hover:shadow-md"
+            >
               <CardContent className="p-5 sm:p-6 h-full flex flex-col gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    {isImage ? (
-                      <ImageIcon className="h-5 w-5 text-primary" />
-                    ) : (
-                      <FileText className="h-5 w-5 text-primary" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-2">
-                    {isEditing ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={renameValue}
-                            onChange={(e) => {
-                              setRenameValue(e.target.value)
-                              setRenameError('')
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                submitRename()
-                              }
-                              if (e.key === 'Escape') {
-                                e.preventDefault()
-                                cancelRenaming()
-                              }
-                            }}
-                            className="flex-1 rounded-md border border-input bg-background px-3 py-1 text-sm"
-                            autoFocus
-                            disabled={renameLoadingId === file.id}
-                          />
-                          {currentExtension && (
-                            <span className="text-sm text-muted-foreground">{currentExtension}</span>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={submitRename}
-                            disabled={renameLoadingId === file.id}
-                            title="Simpan"
-                          >
-                            <Check className="h-4 w-4 text-green-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={cancelRenaming}
-                            disabled={renameLoadingId === file.id}
-                            title="Batal"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      {isImage ? (
+                        <ImageIcon className="h-5 w-5 text-primary" />
+                      ) : (
+                        <FileText className="h-5 w-5 text-primary" />
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0 space-y-2">
+                      {isEditing ? (
+                        <div className="space-y-2 w-full">
+                          <div className="flex flex-col gap-2 w-full">
+                            <div className="flex items-center gap-2 w-full">
+                              <input
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => {
+                                  setRenameValue(e.target.value)
+                                  setRenameError('')
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    submitRename()
+                                  }
+                                  if (e.key === 'Escape') {
+                                    e.preventDefault()
+                                    cancelRenaming()
+                                  }
+                                }}
+                                className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                autoFocus
+                                disabled={renameLoadingId === file.id}
+                              />
+                              {currentExtension && (
+                                <span className="text-sm text-muted-foreground whitespace-nowrap">{currentExtension}</span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col gap-2 w-full">
+                              <Button
+                                onClick={submitRename}
+                                disabled={renameLoadingId === file.id}
+                                className="h-9 w-full justify-center gap-2"
+                                title="Simpan"
+                              >
+                                <Check className="h-4 w-4" />
+                                Simpan
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={cancelRenaming}
+                                disabled={renameLoadingId === file.id}
+                                className="h-9 w-full justify-center gap-2"
+                                title="Batal"
+                              >
+                                <X className="h-4 w-4" />
+                                Batal
+                              </Button>
+                            </div>
+                          </div>
+
+                          {renameError && <p className="text-xs text-red-500">{renameError}</p>}
                         </div>
-                        {renameError && (
-                          <p className="text-xs text-red-500">{renameError}</p>
-                        )}
+                      ) : (
+                        <div
+                          className="text-sm font-medium leading-snug text-gray-900 dark:text-gray-100 truncate max-w-[60%] sm:max-w-none"
+                          title={needsTooltip ? originalName : undefined}
+                        >
+                          {visibleName}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {formatDate(file.created_at)}
+                        </span>
+                        <span className="text-muted-foreground/70">•</span>
+                        <span>{formatFileSize(file.metadata?.size || 0)}</span>
                       </div>
-                    ) : (
-                      <h4
-                        className="text-base font-semibold leading-snug text-gray-900 dark:text-gray-100"
-                        title={needsTooltip ? originalName : undefined}
-                        style={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        {visibleName}
-                      </h4>
-                    )}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {formatDate(file.created_at)}
-                      </span>
-                      <span className="text-muted-foreground/70">•</span>
-                      <span>{formatFileSize(file.metadata?.size || 0)}</span>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-end gap-2">
-                  {(isPDF || isImage) && !isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handlePreview(file.name, file.metadata?.mimetype)}
-                      title="Preview"
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
+                    {(isPDF || isImage) && !isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePreview(file.name, file.metadata?.mimetype)}
+                        title="Preview"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    )}
 
-                  {!isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleShare(file.name)}
-                      title="Bagikan"
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleShare(file.name)}
+                        title="Bagikan"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    )}
 
-                  {!isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDownload(file.name)}
-                      title="Download"
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  )}
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownload(file.name)}
+                        title="Download"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
 
-                  {!isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => startRenaming(file)}
-                      title="Ubah nama"
-                      className="text-muted-foreground hover:text-primary"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  )}
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => startRenaming(file)}
+                        title="Ubah nama"
+                        className="text-muted-foreground hover:text-primary"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
 
-                  {!isEditing && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(file.name)}
-                      title="Hapus"
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
+                    {!isEditing && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(file.name)}
+                        title="Hapus"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -425,11 +431,11 @@ export default function FileList({ folderPath }: FileListProps) {
       )}
 
       {previewFile && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-8">
-          <div className="relative max-w-4xl max-h-full">
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+          <div className="relative w-full max-w-4xl mx-auto max-h-[90vh] overflow-hidden rounded-lg">
             <button
               onClick={() => setPreviewFile(null)}
-              className="absolute -top-12 right-0 text-white hover:text-gray-300"
+              className="absolute top-3 right-3 text-white hover:text-gray-300"
             >
               <X className="h-6 w-6" />
             </button>
@@ -437,12 +443,12 @@ export default function FileList({ folderPath }: FileListProps) {
               <img
                 src={previewFile.url}
                 alt={previewFile.name}
-                className="max-w-full max-h-full object-contain"
+                className="w-full h-full object-contain rounded-lg"
               />
             ) : (
-              <div className="bg-white p-8 rounded-lg text-center">
-                <p className="text-gray-600">Preview not available for this file type</p>
-                <Button onClick={() => window.open(previewFile.url, '_blank')} className="mt-4">
+              <div className="bg-white p-6 rounded-lg text-center space-y-4">
+                <p className="text-gray-600 text-sm">Preview not available for this file type</p>
+                <Button onClick={() => window.open(previewFile.url, '_blank')} className="w-full sm:w-auto">
                   Open File
                 </Button>
               </div>
@@ -452,9 +458,12 @@ export default function FileList({ folderPath }: FileListProps) {
       )}
 
       {shareModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShareModalOpen(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setShareModalOpen(false)}
+        >
           <div
-            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl space-y-4"
+            className="w-full max-w-sm mx-4 sm:max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
@@ -468,14 +477,18 @@ export default function FileList({ folderPath }: FileListProps) {
             </div>
             <div className="space-y-2">
               <label className="text-xs text-gray-500">Link berlaku 24 jam</label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <input
                   type="text"
                   readOnly
                   value={shareTarget.url || ''}
-                  className="flex-1 rounded-md border border-gray-200 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm truncate"
                 />
-                <Button onClick={handleCopyShare} disabled={!shareTarget.url || shareLoading} className="min-w-[120px] flex items-center gap-2">
+                <Button
+                  onClick={handleCopyShare}
+                  disabled={!shareTarget.url || shareLoading}
+                  className="min-w-[140px] whitespace-nowrap flex items-center justify-center gap-2"
+                >
                   <Copy className="h-4 w-4" />
                   {copySuccess ? '✅ Tersalin!' : 'Salin Link'}
                 </Button>

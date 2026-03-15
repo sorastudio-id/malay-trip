@@ -1,15 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent } from './ui/card'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Folder } from '@/lib/constants'
 import { listFiles } from '@/lib/supabase'
 import { formatDate } from '@/lib/utils'
-import FileUploader from './FileUploader'
-import FileList from './FileList'
-import { ArrowLeft, ArrowRight, RefreshCw } from 'lucide-react'
+import { ArrowRight, RefreshCw } from 'lucide-react'
 
 interface MemberFolderGridProps {
   folders: Folder[]
@@ -17,7 +16,7 @@ interface MemberFolderGridProps {
 }
 
 export default function MemberFolderGrid({ folders, basePath }: MemberFolderGridProps) {
-  const [selectedFolder, setSelectedFolder] = useState<Folder | null>(null)
+  const router = useRouter()
   const [refreshKey, setRefreshKey] = useState(0)
   const [stats, setStats] = useState<Record<string, { count: number; lastUpload: string | null }>>({})
   const [loading, setLoading] = useState(false)
@@ -58,42 +57,6 @@ export default function MemberFolderGrid({ folders, basePath }: MemberFolderGrid
   const totalFiles = Object.values(stats).reduce((sum, entry) => sum + entry.count, 0)
   const filledFolders = folders.filter((folder) => (stats[folder.slug]?.count || 0) > 0).length
   const totalFolders = folders.length
-
-  if (selectedFolder) {
-    const folderStats = stats[selectedFolder.slug]
-    return (
-      <div className="space-y-6">
-        <button
-          onClick={() => setSelectedFolder(null)}
-          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Kembali ke daftar folder
-        </button>
-
-        <div className="flex items-center gap-3">
-          <div className="text-4xl">{selectedFolder.emoji}</div>
-          <div>
-            <h2 className="text-2xl font-bold">{selectedFolder.name}</h2>
-            <p className="text-sm text-muted-foreground">
-              {folderStats?.count || 0} file tersedia
-            </p>
-          </div>
-        </div>
-
-        <FileUploader
-          folderPath={`${basePath}/${selectedFolder.slug}`}
-          folderName={selectedFolder.name}
-          onUploadComplete={() => setRefreshKey((prev) => prev + 1)}
-        />
-
-        <FileList
-          folderPath={`${basePath}/${selectedFolder.slug}`}
-          key={`${selectedFolder.slug}-${refreshKey}`}
-        />
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6">
@@ -152,7 +115,11 @@ export default function MemberFolderGrid({ folders, basePath }: MemberFolderGrid
                   </span>
                 </div>
                 <div className="mt-auto">
-                  <Button className="w-full" variant="outline" onClick={() => setSelectedFolder(folder)}>
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => router.push(`/member/${basePath}/${folder.slug}`)}
+                  >
                     Buka Folder
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>

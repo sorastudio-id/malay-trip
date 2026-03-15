@@ -5,13 +5,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Moon, Sun, LogOut, Home, ArrowLeft, BarChart3, FileText, Menu, X, DollarSign } from 'lucide-react'
 import { Button } from './ui/button'
 import { useEffect, useState } from 'react'
-import { useNavigationHistory } from '@/hooks/useNavigationHistory'
 
 export default function Navbar() {
   const pathname = usePathname()
   const router = useRouter()
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
-  const { goBack } = useNavigationHistory()
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -38,7 +36,7 @@ export default function Navbar() {
   }
 
   const handleBack = () => {
-    goBack()
+    router.back()
   }
 
   if (pathname === '/') return null

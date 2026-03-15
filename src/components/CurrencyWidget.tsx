@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
-interface FrankfurterResponse {
-  date: string
+interface ExchangeRateResponse {
+  result: string
   rates: {
     IDR: number
   }
@@ -20,20 +20,24 @@ export default function CurrencyWidget({ condensed = false }: { condensed?: bool
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<string>('')
-  const [myrValue, setMyrValue] = useState('1')
+  const [myrValue, setMyrValue] = useState('')
   const [idrValue, setIdrValue] = useState('')
 
   const fetchRate = async () => {
     try {
       setLoading(true)
       setError(null)
-      const res = await fetch('https://api.frankfurter.app/latest?from=MYR&to=IDR')
+      const res = await fetch('https://open.er-api.com/v6/latest/MYR')
       if (!res.ok) throw new Error('Gagal mengambil kurs')
-      const data: FrankfurterResponse = await res.json()
+      const data: ExchangeRateResponse = await res.json()
       const currentRate = data.rates.IDR
       setRate(currentRate)
       setUpdatedAt(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }))
-      setIdrValue(formatIdr(Number(myrValue || '0') * currentRate))
+      if (myrValue) {
+        setIdrValue(formatIdr(parseFloat(myrValue) * currentRate))
+      } else {
+        setIdrValue('')
+      }
     } catch (err) {
       console.error(err)
       setError('Tidak bisa memuat kurs saat ini')
@@ -50,17 +54,38 @@ export default function CurrencyWidget({ condensed = false }: { condensed?: bool
 
   useEffect(() => {
     if (!rate) return
-    const amount = Number(myrValue || '0')
-    if (isNaN(amount)) return
-    setIdrValue(formatIdr(amount * rate))
+    if (myrValue) {
+      const amount = parseFloat(myrValue)
+      if (!isNaN(amount)) {
+        setIdrValue(formatIdr(amount * rate))
+      }
+    } else {
+      setIdrValue('')
+    }
   }, [myrValue, rate])
 
-  const onIdrChange = (value: string) => {
-    if (!rate) return
-    const numeric = Number(value.replace(/[^0-9]/g, ''))
-    const myr = numeric / rate
-    setMyrValue(Number.isFinite(myr) ? myr.toFixed(2) : '0')
-    setIdrValue(formatIdr(numeric))
+  const handleMyrChange = (value: string) => {
+    setMyrValue(value)
+    if (rate && value) {
+      const numeric = parseFloat(value)
+      if (!isNaN(numeric)) {
+        setIdrValue(formatIdr(numeric * rate))
+      }
+    } else {
+      setIdrValue('')
+    }
+  }
+
+  const handleIdrChange = (value: string) => {
+    setIdrValue(value)
+    if (rate && value) {
+      const numeric = parseFloat(value.replace(/[^0-9]/g, ''))
+      if (!isNaN(numeric)) {
+        setMyrValue((numeric / rate).toFixed(2))
+      }
+    } else {
+      setMyrValue('')
+    }
   }
 
   const titleSize = condensed ? 'text-lg' : 'text-2xl'
@@ -83,27 +108,29 @@ export default function CurrencyWidget({ condensed = false }: { condensed?: bool
         ) : rate ? (
           <div className="space-y-4">
             <p className="text-lg font-semibold">1 MYR = {formatIdr(rate)}</p>
-            <div className="space-y-3">
-              <div>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:gap-6">
+              <div className="flex-1 space-y-2">
                 <label className="text-sm text-muted-foreground">MYR</label>
                 <div className="relative">
                   <Input
                     value={myrValue}
-                    onChange={(e) => setMyrValue(e.target.value)}
+                    onChange={(e) => handleMyrChange(e.target.value)}
                     className="pl-12"
                     inputMode="decimal"
+                    placeholder="0.00 MYR"
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold">RM</span>
                 </div>
               </div>
-              <div>
+              <div className="flex-1 space-y-2">
                 <label className="text-sm text-muted-foreground">IDR</label>
                 <div className="relative">
                   <Input
                     value={idrValue}
-                    onChange={(e) => onIdrChange(e.target.value)}
+                    onChange={(e) => handleIdrChange(e.target.value)}
                     className="pl-12"
                     inputMode="numeric"
+                    placeholder="0 IDR"
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold">Rp</span>
                 </div>

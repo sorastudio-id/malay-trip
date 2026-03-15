@@ -29,7 +29,7 @@ export default function DashboardPage() {
   })
   const [notificationsEnabled, setNotificationsEnabled] = useState(false)
 
-  const TRIP_START = new Date('2026-03-16T00:00:00+08:00')
+  const TRIP_START = new Date('2026-03-16T16:00:00+07:00')
   const TRIP_END = new Date('2026-03-23T23:59:59+08:00')
   const TRIP_REMINDER = new Date('2026-03-15T09:00:00+08:00')
 

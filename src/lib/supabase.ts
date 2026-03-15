@@ -96,9 +96,29 @@ export async function renameFile(oldPath: string, newPath: string) {
 
   if (oldPath === newPath) return
 
-  const { error } = await supabase.storage.from(BUCKET_NAME).move(oldPath, newPath)
+  const { data, error: downloadError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .download(oldPath)
 
-  if (error) throw error
+  if (downloadError || !data) {
+    throw downloadError || new Error('File tidak ditemukan untuk di-rename')
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(newPath, data, { upsert: false })
+
+  if (uploadError) {
+    throw uploadError
+  }
+
+  const { error: deleteError } = await supabase.storage
+    .from(BUCKET_NAME)
+    .remove([oldPath])
+
+  if (deleteError) {
+    throw deleteError
+  }
 }
 
 // Count files untuk member tertentu
