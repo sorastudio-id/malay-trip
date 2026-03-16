@@ -6,37 +6,46 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
-function compareTimes(date: string, hour: string) {
-  const target = new Date(`${date}T${hour}:00`)
+const getNowInTimezone = (offsetHours: number) => {
+  const now = new Date()
+  const utcTimestamp = now.getTime() + now.getTimezoneOffset() * 60_000
+  return new Date(utcTimestamp + offsetHours * 60 * 60_000)
+}
+
+function compareTimes(date: string, hour: string, timezone: 'WIB' | 'MYT' = 'MYT') {
+  const offset = timezone === 'MYT' ? '+08:00' : '+07:00'
+  const target = new Date(`${date}T${hour}:00${offset}`)
   const now = new Date()
   if (now.getTime() > target.getTime()) return 1
   return -1
 }
 
 export default function ItineraryPage() {
+  const nowInMyt = useMemo(() => getNowInTimezone(8), [])
+
   const todayIndex = useMemo(() => {
-    const now = new Date()
+    const tripStart = new Date('2026-03-16T00:00:00+08:00')
+    const tripEnd = new Date('2026-03-23T23:59:59+08:00')
+
+    if (nowInMyt < tripStart || nowInMyt > tripEnd) return -1
+
     return ITINERARY_DAYS.findIndex((day) => {
-      const currentDayStart = new Date(`${day.date}T00:00:00`)
-      return (
-        now.getUTCFullYear() === currentDayStart.getUTCFullYear() &&
-        now.getUTCMonth() === currentDayStart.getUTCMonth() &&
-        now.getUTCDate() === currentDayStart.getUTCDate()
-      )
+      const dayStart = new Date(`${day.date}T00:00:00+08:00`)
+      const dayEnd = new Date(`${day.date}T23:59:59+08:00`)
+      return nowInMyt >= dayStart && nowInMyt <= dayEnd
     })
-  }, [])
+  }, [nowInMyt])
 
   const [activeDay, setActiveDay] = useState(() => (todayIndex >= 0 ? todayIndex : 0))
   const [isOffline, setIsOffline] = useState(false)
   const [savedAt, setSavedAt] = useState<string | null>(null)
 
   useEffect(() => {
-    if (todayIndex >= 0) {
-      setActiveDay(todayIndex)
-      const section = document.getElementById(`itinerary-day-${todayIndex}`)
-      if (section) {
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+    const fallbackIndex = todayIndex >= 0 ? todayIndex : 0
+    setActiveDay(fallbackIndex)
+    const section = document.getElementById(`itinerary-day-${fallbackIndex}`)
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [todayIndex])
 
@@ -149,7 +158,9 @@ export default function ItineraryPage() {
             {(() => {
               const highlightIndex = (() => {
                 if (index !== todayIndex) return -1
-                const firstUpcoming = day.items.findIndex((entry) => compareTimes(day.date, entry.timeValue) === -1)
+                const firstUpcoming = day.items.findIndex((entry) =>
+                  compareTimes(day.date, entry.timeValue, entry.timezone) === -1
+                )
                 if (firstUpcoming >= 0) return firstUpcoming
                 return day.items.length - 1
               })()
@@ -157,7 +168,7 @@ export default function ItineraryPage() {
               return (
                 <div className="relative border-l-2 border-muted pl-6 space-y-6">
                   {day.items.map((item, itemIdx) => {
-                    const isPast = compareTimes(day.date, item.timeValue) === 1
+                    const isPast = compareTimes(day.date, item.timeValue, item.timezone) === 1
                     const isHighlight = index === todayIndex && itemIdx === highlightIndex
 
                     return (
